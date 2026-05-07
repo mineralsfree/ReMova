@@ -1,0 +1,17 @@
+==========FIXING========
+WIKIPEDIA JQUERY (DROP SOME RULES; BE CAREFUL! ⚠️) (https://be.wikipedia.org/wiki/MediaWiki:Gadget-wikificator.js) - SET OF REGEX FOR CLEANING COMMON MISTAKES IN THE TEXT
+ftfy — fixes mojibake and encoding artifacts; essential for anything that touched cp1251
+Unicode NFKC via unicodedata — collapses lookalike codepoints
+
+==========FILTERING========
+GlotLID (better than fastText lid.176 for low-resource) — HPLT's be labels are noisy, you'll want to re-LID 
+RELID WITH V3
+LANGTOOL - OOV ratio as an orthography signal https://languagetool.org/
+KenLM perplexity filter — train a small KenLM on a clean Belarusian seed, drop high-PPL lines; catches Trasianka and Russian leakage that LID misses (LAST PRIORITY)
+
+===========DEDUP=========
+datasketch (MinHash LSH) or text-dedup — near-duplicate removal at scale + MAKE SURE THAT THERE ARE NO SIMILAR ENTRIES IN THE EVALUATION DATASET
+
+=====PARALLEL-SPECIFIC=====
+SONAR cosine threshold  (BLASER validation metric)
+BiCleaner-AI — neural quality filter for parallel pairs

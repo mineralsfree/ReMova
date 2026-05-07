@@ -1,0 +1,10 @@
+input: data/in.jsonl
+output: data/out.jsonl
+stats_dir: stats/
+
+stages:
+  - name: ftfy
+    # output_field: text_ftfy   # optional; default "text" replaces in place. Set this for dev diffing.
+  - name: glotlid
+    model_path: models/glotlid.bin
+    score_threshold: 0.5
