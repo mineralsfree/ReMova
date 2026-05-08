@@ -8,8 +8,10 @@ from peratrasher.base import Stage
 from peratrasher.ftfy_stage import FtfyStage
 from peratrasher.glotlid import GlotLIDStage
 from peratrasher.jsonio import iter_jsonl, write_row
+from peratrasher.wikificator import WikificatorStage
 
 STAGES: dict[str, type[Stage]] = {
+    "wikificator": WikificatorStage,
     "ftfy": FtfyStage,
     "glotlid": GlotLIDStage,
 }
@@ -33,6 +35,7 @@ def run(config_path: str | Path) -> None:
     input_path = Path(cfg["input"])
     output_path = Path(cfg["output"])
     stats_dir = Path(cfg["stats_dir"])
+    prefix = cfg["stats_prefix"]
     stats_dir.mkdir(parents=True, exist_ok=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -47,7 +50,7 @@ def run(config_path: str | Path) -> None:
             write_row(fout, row)
 
     for stage in stages:
-        stats_path = stats_dir / f"{stage.name}.json"
+        stats_path = stats_dir / f"{prefix}_{stage.name}.json"
         stats_path.write_text(
             json.dumps(stage.stats(), indent=2, ensure_ascii=False),
             encoding="utf-8",
