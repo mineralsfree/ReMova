@@ -21,6 +21,7 @@ def test_pipeline_runs_ftfy_end_to_end(tmp_path):
         f"input: {input_path}\n"
         f"output: {output_path}\n"
         f"stats_dir: {stats_dir}\n"
+        "stats_prefix: test\n"
         "stages:\n"
         "  - name: ftfy\n",
         encoding="utf-8",
@@ -40,6 +41,6 @@ def test_pipeline_runs_ftfy_end_to_end(tmp_path):
         assert "removal_reasons" in r
         assert "metrics" in r
 
-    stats = json.loads((stats_dir / "ftfy.json").read_text())
+    stats = json.loads((stats_dir / "test_ftfy.json").read_text())
     assert stats["rows_total"] == 2
     assert stats["rows_changed"] == 1

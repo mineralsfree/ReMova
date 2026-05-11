@@ -1,5 +1,5 @@
-input: data/file2.txt
-output: data/out2.jsonl
+input: data/in3.jsonl
+output: data/out_3_keep.jsonl
 stats_dir: stats/
 stats_prefix: w_wiki
 batch_size: 256 # rows buffered before a flush; should be >= LT workers x several
@@ -9,6 +9,8 @@ stages:
     # output_field: text_wiki # optional; default "text" replaces in place. Set this for dev diffing.
   - name: ftfy
     # output_field: text_ftfy # optional; default "text" replaces in place. Set this for dev diffing.
+  - name: nfkc
+    # output_field: text_nfkc # optional; default "text" replaces in place. Set this for dev diffing.
   - name: glotlid
     model_path: models/glotlid.bin
     score_threshold: 0.7

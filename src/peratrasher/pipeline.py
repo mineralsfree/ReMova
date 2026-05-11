@@ -17,6 +17,7 @@ from peratrasher.wikificator import WikificatorStage
 STAGES: dict[str, type[Stage]] = {
     "wikificator": WikificatorStage,
     "ftfy": FtfyStage,
+    "nfkc": NFKCStage,
     "glotlid": GlotLIDStage,
     "languagetool": LanguageToolStage,
 }
