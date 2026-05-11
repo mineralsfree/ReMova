@@ -1,7 +1,8 @@
 input: data/file2.txt
 output: data/out2.jsonl
 stats_dir: stats/
-stats_prefix: wo_wiki
+stats_prefix: w_wiki
+batch_size: 256 # rows buffered before a flush; should be >= LT workers x several
 
 stages:
   - name: wikificator
@@ -11,3 +12,16 @@ stages:
   - name: glotlid
     model_path: models/glotlid.bin
     score_threshold: 0.7
+  - name: languagetool
+    language: be-BY
+    workers: 8 # one JVM per perf core; LT's rule engine is the bottleneck
+    # `command` is the subprocess argv prefix that launches the LocalChecker JVM.
+    # The stage appends `--stdin-loop --language <language>` automatically.
+    # The argfile holds the full -cp ... line so this stays readable; regenerate
+    # it if the LanguageTool checkout or its Maven cache moves.
+    command:
+      - java
+      - "@/Users/mikita/languagetool/languagetool-server/target/localchecker.argfile"
+      - org.languagetool.server.LocalChecker
+    # disabled_rules:
+    #   - WHITESPACE_RULE
