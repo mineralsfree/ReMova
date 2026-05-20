@@ -1,0 +1,35 @@
+input: data/bouquet_clean_pipeline_dedup.jsonl
+survived: data/bouquet_survived.jsonl
+rejected: data/bouquet_rejected.jsonl
+stats_dir: stats/
+stats_prefix: bouquet_be
+
+# Goal: narkamaŭka-only training corpus (no Tarashkievica). Belarusian LT
+# dictionary is narkamaŭka-only, so when it flags a word as a misspelling
+# it's either (a) a proper noun / loan word it doesn't know, or (b) a
+# Tarashkievica form. Stage now discounts proper nouns automatically
+# (`exclude_proper_nouns: true` in pipeline.yaml), so the misspelling count
+# here is closer to "Tarashkievica deviations + real typos".
+filters:
+  - name: no_objections
+    type: no_removal_reasons
+    # wrong_lang on either side + length_ratio violations.
+
+  - name: narkamaŭka_density
+    type: max_metric
+    key: metrics.src_langtool.density
+    value: 0.1
+    # Density is now computed AFTER proper-noun exclusion, so the same cutoff
+    # is effectively stricter — a row with 1 LT match per 10 non-proper-noun
+    # words is still suspicious.
+
+  - name: at_most_zero_unknown_word
+    type: max_metric
+    key: metrics.src_langtool.types.misspelling
+    value: 0
+    # With proper-noun exclusion on, any remaining misspelling is either a
+    # Tarashkievica form or a real typo — neither belongs in the training set.
+
+  - name: not_a_duplicate
+    type: require_true
+    key: metrics.dedup_keeper
