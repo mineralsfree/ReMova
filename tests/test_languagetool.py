@@ -80,6 +80,41 @@ def test_density_handles_zero_num_words():
     assert row["metrics"]["langtool"]["density"] == 1.0
 
 
+def test_density_computed_from_input_field_when_num_words_missing():
+    # No upstream num_words → derive denominator from text we just checked.
+    # 4 words, 2 matches → density = 0.5.
+    stage = make_stage(
+        matches=[
+            {"rule": {"issueType": "misspelling"}},
+            {"rule": {"issueType": "grammar"}},
+        ]
+    )
+    row = {"text": "this has four words"}
+    stage.process(row)
+    assert row["metrics"]["langtool"]["density"] == pytest.approx(0.5)
+
+
+def test_density_prefers_upstream_num_words_when_present():
+    # Upstream metadata wins; we don't recompute even if the text disagrees.
+    stage = make_stage(matches=[{"rule": {"issueType": "misspelling"}}])
+    row = {"text": "this has four words", "num_words": 10}
+    stage.process(row)
+    assert row["metrics"]["langtool"]["density"] == pytest.approx(0.1)
+
+
+def test_density_uses_input_field_not_hardcoded_text():
+    # Stage configured on `src`; word count should come from row["src"],
+    # not from row["text"] (which is a misleading single-word string here).
+    stage = make_stage(
+        matches=[{"rule": {"issueType": "misspelling"}}],
+        input_field="src",
+        metric_prefix="src_langtool",
+    )
+    row = {"text": "ignored", "src": "five words total in this sentence"}
+    stage.process(row)
+    assert row["metrics"]["src_langtool"]["density"] == pytest.approx(1 / 6)
+
+
 def test_missing_issue_type_falls_back_to_uncategorized():
     stage = make_stage(matches=[{"rule": {}}, {"rule": {"issueType": None}}])
     stage.process({"text": "x", "num_words": 1})
@@ -148,3 +183,108 @@ def test_disabled_rules_filter_client_side():
 def test_construct_without_command_or_client_raises():
     with pytest.raises(ValueError, match="needs either"):
         LanguageToolStage()
+
+
+# ---- exclude_proper_nouns ------------------------------------------------
+
+
+def test_exclude_proper_nouns_skips_latin_token():
+    """Pure ASCII-Latin embed in Cyrillic text is treated as a proper noun."""
+    text = "Hister — род жукоў."
+    client = FakeClient(
+        [{"matches": [{"rule": {"issueType": "misspelling"}, "offset": 0, "length": 6}]}]
+    )
+    stage = LanguageToolStage(client=client, exclude_proper_nouns=True)
+    stage.process({"text": text, "num_words": 4})
+    # access the metrics from the stage's own books
+    s = stage.stats()
+    assert s["excluded_proper_nouns_total"] == 1
+    assert s["issue_type_totals"] == {}
+
+
+def test_exclude_proper_nouns_skips_capitalized_non_initial():
+    """Capitalized non-initial Cyrillic word treated as proper noun."""
+    text = "Жыў у Швецыі тры гады."
+    offset = text.index("Швецыі")
+    client = FakeClient(
+        [{"matches": [
+            {"rule": {"issueType": "misspelling"}, "offset": offset, "length": len("Швецыі")}
+        ]}]
+    )
+    stage = LanguageToolStage(client=client, exclude_proper_nouns=True)
+    row = {"text": text, "num_words": 5}
+    stage.process(row)
+    lt = row["metrics"]["langtool"]
+    assert lt["count"] == 0
+    assert lt["excluded_proper_nouns"] == 1
+
+
+def test_exclude_proper_nouns_keeps_sentence_initial():
+    """A capitalized word at the very start of a sentence is NOT a proper-noun
+    signal — could be a real misspelling at the start of the sentence."""
+    text = "Тарашкевіца форма."
+    client = FakeClient(
+        [{"matches": [
+            {"rule": {"issueType": "misspelling"}, "offset": 0, "length": len("Тарашкевіца")}
+        ]}]
+    )
+    stage = LanguageToolStage(client=client, exclude_proper_nouns=True)
+    row = {"text": text, "num_words": 2}
+    stage.process(row)
+    lt = row["metrics"]["langtool"]
+    assert lt["count"] == 1
+    assert lt["types"] == {"misspelling": 1}
+    assert lt["excluded_proper_nouns"] == 0
+
+
+def test_exclude_proper_nouns_keeps_after_period():
+    """Capitalized after `. ` is sentence-initial, still real misspelling."""
+    text = "Канец сказа. Тарашкевіца ёсць."
+    offset = text.index("Тарашкевіца")
+    client = FakeClient(
+        [{"matches": [
+            {"rule": {"issueType": "misspelling"}, "offset": offset, "length": len("Тарашкевіца")}
+        ]}]
+    )
+    stage = LanguageToolStage(client=client, exclude_proper_nouns=True)
+    row = {"text": text, "num_words": 4}
+    stage.process(row)
+    lt = row["metrics"]["langtool"]
+    assert lt["count"] == 1  # kept — at sentence start despite mid-document position
+    assert lt["excluded_proper_nouns"] == 0
+
+
+def test_exclude_proper_nouns_does_not_affect_non_misspelling_types():
+    """Grammar / whitespace matches stay counted even when they look proper-noun-ish."""
+    text = "Some Capitalized word."
+    offset = text.index("Capitalized")
+    client = FakeClient(
+        [{"matches": [
+            {"rule": {"issueType": "grammar"}, "offset": offset, "length": len("Capitalized")}
+        ]}]
+    )
+    stage = LanguageToolStage(client=client, exclude_proper_nouns=True)
+    row = {"text": text, "num_words": 3}
+    stage.process(row)
+    lt = row["metrics"]["langtool"]
+    assert lt["count"] == 1
+    assert lt["types"] == {"grammar": 1}
+    assert lt["excluded_proper_nouns"] == 0
+
+
+def test_exclude_proper_nouns_disabled_by_default():
+    """Default behavior unchanged: proper-noun-looking misspellings still counted."""
+    text = "Жыў у Швецыі."
+    offset = text.index("Швецыі")
+    client = FakeClient(
+        [{"matches": [
+            {"rule": {"issueType": "misspelling"}, "offset": offset, "length": len("Швецыі")}
+        ]}]
+    )
+    stage = LanguageToolStage(client=client)  # exclude_proper_nouns defaults to False
+    row = {"text": text, "num_words": 3}
+    stage.process(row)
+    lt = row["metrics"]["langtool"]
+    assert lt["count"] == 1
+    assert lt["types"] == {"misspelling": 1}
+    assert lt["excluded_proper_nouns"] == 0
