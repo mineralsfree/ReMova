@@ -1,0 +1,21 @@
+input: data/bouquet_survived.jsonl
+output: data/bouquet_train.parquet
+stats_dir: stats/
+stats_prefix: bouquet_be
+
+# Parquet is the HF-native format: load with
+#   load_dataset("parquet", data_files="data/bouquet_train.parquet")
+# Switch `format` to `jsonl` for a JSON-Lines file
+# (also HF-readable via load_dataset("json", ...), bigger on disk).
+format: parquet
+compression: zstd # parquet only; 'zstd' | 'snappy' | 'gzip' | 'none'
+
+# Flat output columns. Bouquet schema: src_text, tgt_text, src_lang, tgt_lang
+# plus uniq_id (P002-S1 style) for traceback. `domain`, `register`,
+# `split`, `tags`, `level` are also available if you want to keep them.
+columns:
+  - uniq_id
+  - src_text
+  - tgt_text
+  - src_lang
+  - tgt_lang
