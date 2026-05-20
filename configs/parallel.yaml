@@ -1,0 +1,44 @@
+input: data/bouquet.jsonl
+output: data/bouquet_clean.jsonl
+stats_dir: stats/
+stats_prefix: bouquet_be_en
+
+# Bouquet uses `src_text` / `tgt_text` field names (not `src` / `tgt`) — every
+# stage below points at those via its `input_field` / `*_field` kwargs.
+stages:
+  - name: wikificator
+    input_field: src_text
+  - name: citations              # strip [5]-style Wikipedia citation markers
+    input_field: src_text
+  - name: citations
+    input_field: tgt_text
+  - name: ftfy
+    input_field: src_text
+  - name: ftfy
+    input_field: tgt_text
+  - name: nfkc
+    input_field: src_text
+  - name: nfkc
+    input_field: tgt_text
+
+  # Parallel-only stages.
+  - name: length_ratio
+    src_field: src_text
+    tgt_field: tgt_text
+    unit: words
+    min_ratio: 0.5
+    max_ratio: 2.5
+    length_slack:
+      5 # if |tgt_len - src_len| <= 5 (in word units), the ratio
+      # check is overridden — short pairs aren't flagged just
+      # because translation length naturally varies more there.
+  - name: bi_glotlid
+    model_path: models/glotlid.bin
+    src_field: src_text
+    tgt_field: tgt_text
+    src_lang_field: src_lang
+    tgt_lang_field: tgt_lang
+    score_threshold: 0.55
+    min_words: 5 # GlotLID is unreliable below ~5 tokens (mislabels short BE
+                 # as RU/UK and short EN as Esperanto/Swiss-German). Below
+                 # this, predictions are recorded but flags are suppressed.
