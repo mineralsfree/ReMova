@@ -27,21 +27,34 @@ STAGES: dict[str, type[Stage]] = {
 DEFAULT_BATCH_SIZE = 128
 
 
-def build_stages(stage_configs: list[dict]) -> list[Stage]:
+def _build_stages(
+    stage_configs: list[dict], stages_dict: dict[str, type[Stage]]
+) -> list[Stage]:
     stages: list[Stage] = []
     for entry in stage_configs:
         name = entry["name"]
-        if name not in STAGES:
-            raise ValueError(f"Unknown stage: {name!r}. Available: {sorted(STAGES)}")
+        if name not in stages_dict:
+            raise ValueError(
+                f"Unknown stage: {name!r}. Available: {sorted(stages_dict)}"
+            )
         kwargs = {k: v for k, v in entry.items() if k != "name"}
-        stages.append(STAGES[name](**kwargs))
+        stages.append(stages_dict[name](**kwargs))
     return stages
+
+
+def build_stages(stage_configs: list[dict]) -> list[Stage]:
+    return _build_stages(stage_configs, STAGES)
 
 
 def run(config_path: str | Path) -> None:
     with open(config_path, encoding="utf-8") as f:
         cfg: dict[str, Any] = yaml.safe_load(f)
+    _run_pipeline(cfg, STAGES)
 
+
+def _run_pipeline(
+    cfg: dict[str, Any], stages_dict: dict[str, type[Stage]]
+) -> None:
     input_path = Path(cfg["input"])
     output_path = Path(cfg["output"])
     stats_dir = Path(cfg["stats_dir"])
@@ -50,7 +63,7 @@ def run(config_path: str | Path) -> None:
     stats_dir.mkdir(parents=True, exist_ok=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    stages = build_stages(cfg["stages"])
+    stages = _build_stages(cfg["stages"], stages_dict)
     times: dict[str, float] = {stage.name: 0.0 for stage in stages}
 
     def flush(batch: list[dict], fout) -> None:

@@ -8,15 +8,20 @@ from peratrasher.base import Stage
 class FtfyStage(Stage):
     name = "ftfy"
 
-    def __init__(self, output_field: str = "text") -> None:
-        self.output_field = output_field
+    def __init__(
+        self, input_field: str = "text", output_field: str | None = None
+    ) -> None:
+        self.input_field = input_field
+        self.output_field = output_field if output_field is not None else input_field
+        if input_field != "text":
+            self.name = f"ftfy_{input_field}"
         self._rows_total = 0
         self._rows_changed = 0
         self._explanations: Counter[str] = Counter()
 
     def process(self, row: dict) -> None:
         self._rows_total += 1
-        original = row["text"]
+        original = row[self.input_field]
         result = fix_and_explain(original)
         if result.text != original:
             self._rows_changed += 1

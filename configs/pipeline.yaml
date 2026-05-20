@@ -1,26 +1,37 @@
-input: data/in3.jsonl
-output: data/out_3_keep.jsonl
+input: data/bouquet_clean.jsonl # output of `peratrasher-parallel --config configs/parallel.yaml`
+output: data/bouquet_clean_pipeline.jsonl
 stats_dir: stats/
-stats_prefix: w_wiki
+stats_prefix: bouquet_be
 batch_size: 256 # rows buffered before a flush; should be >= LT workers x several
 
+# Run the monolingual pipeline on the Belarusian side of the bitext.
+# Each stage's `input_field: src` makes it read row["src"] instead of
+# row["text"]; runtime stage names are auto-suffixed (e.g. `glotlid_src`)
+# so stats files don't collide with prior monolingual runs.
+#
+# wikificator / ftfy / nfkc are already applied per-side in parallel.yaml,
+# but they're idempotent — leaving them here is defensive and harmless.
 stages:
-  - name: wikificator
-    # output_field: text_wiki # optional; default "text" replaces in place. Set this for dev diffing.
-  - name: ftfy
-    # output_field: text_ftfy # optional; default "text" replaces in place. Set this for dev diffing.
-  - name: nfkc
-    # output_field: text_nfkc # optional; default "text" replaces in place. Set this for dev diffing.
-  - name: glotlid
-    model_path: models/glotlid.bin
-    score_threshold: 0.7
+  # - name: wikificator
+  #   input_field: src_text
+  # - name: ftfy
+  #   input_field: src_text
+  # - name: nfkc
+  #   input_field: src_text
+  # - name: glotlid
+  #   model_path: models/glotlid.bin
+  #   input_field: src_text
+  #   lang_field: src_lang        # tatoeba rows carry src_lang = "bel_Cyrl"
+  #   metric_prefix: src_glotlid  # writes metrics.src_glotlid_label / _score
+  #   removal_reason: src_wrong_lang
+  #   score_threshold: 0.7
   - name: languagetool
+    input_field: src_text
+    metric_prefix: src_langtool # writes metrics.src_langtool = {types, count, density, excluded_proper_nouns}
     language: be-BY
     workers: 8 # one JVM per perf core; LT's rule engine is the bottleneck
-    # `command` is the subprocess argv prefix that launches the LocalChecker JVM.
-    # The stage appends `--stdin-loop --language <language>` automatically.
-    # The argfile holds the full -cp ... line so this stays readable; regenerate
-    # it if the LanguageTool checkout or its Maven cache moves.
+    exclude_proper_nouns: true # discount LT misspellings on capitalised non-initial / pure-Latin tokens
+                               # (Швецыі, Стакгольме, Hister, Ryanair, ...). Tarashkievica still flags.
     command:
       - java
       - "@/Users/mikita/languagetool/languagetool-server/target/localchecker.argfile"

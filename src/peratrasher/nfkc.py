@@ -11,14 +11,19 @@ from peratrasher.base import Stage
 class NFKCStage(Stage):
     name = "nfkc"
 
-    def __init__(self, output_field: str = "text") -> None:
-        self.output_field = output_field
+    def __init__(
+        self, input_field: str = "text", output_field: str | None = None
+    ) -> None:
+        self.input_field = input_field
+        self.output_field = output_field if output_field is not None else input_field
+        if input_field != "text":
+            self.name = f"nfkc_{input_field}"
         self._rows_total = 0
         self._rows_changed = 0
 
     def process(self, row: dict) -> None:
         self._rows_total += 1
-        original = row["text"]
+        original = row[self.input_field]
         normalized = unicodedata.normalize("NFKC", original)
         if normalized != original:
             self._rows_changed += 1

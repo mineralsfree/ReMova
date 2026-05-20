@@ -427,13 +427,17 @@ class WikificatorStage(Stage):
 
     def __init__(
         self,
-        output_field: str = "text",
+        input_field: str = "text",
+        output_field: str | None = None,
         apply_typos: bool = True,
         apply_dashes: bool = True,
         apply_nbsp: bool = True,
         apply_quotes: bool = True,
     ) -> None:
-        self.output_field = output_field
+        self.input_field = input_field
+        self.output_field = output_field if output_field is not None else input_field
+        if input_field != "text":
+            self.name = f"wikificator_{input_field}"
         self.apply_typos = apply_typos
         self.apply_dashes = apply_dashes
         self.apply_nbsp = apply_nbsp
@@ -444,7 +448,7 @@ class WikificatorStage(Stage):
 
     def process(self, row: dict) -> None:
         self._rows_total += 1
-        original = row["text"]
+        original = row[self.input_field]
         cleaned, fires = apply_rules(
             original,
             apply_typos=self.apply_typos,
