@@ -12,6 +12,12 @@ dependencies = [
 
 [project.scripts]
 peratrasher = "peratrasher.cli:main"
+peratrasher-dedup = "peratrasher.dedup:main"
+peratrasher-parallel = "peratrasher.parallel:main"
+peratrasher-tatoeba-prep = "peratrasher.tatoeba_prep:main"
+peratrasher-moses-prep = "peratrasher.moses_prep:main"
+peratrasher-filter = "peratrasher.filter:main"
+peratrasher-export = "peratrasher.export:main"
 
 [dependency-groups]
 dev = ["pytest>=7.0"]
