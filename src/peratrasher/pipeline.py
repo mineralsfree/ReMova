@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from peratrasher.base import Stage
+from peratrasher.citations import CitationsStage
 from peratrasher.ftfy_stage import FtfyStage
 from peratrasher.glotlid import GlotLIDStage
 from peratrasher.jsonio import iter_jsonl, write_row
@@ -16,6 +17,7 @@ from peratrasher.wikificator import WikificatorStage
 
 STAGES: dict[str, type[Stage]] = {
     "wikificator": WikificatorStage,
+    "citations": CitationsStage,
     "ftfy": FtfyStage,
     "nfkc": NFKCStage,
     "glotlid": GlotLIDStage,
