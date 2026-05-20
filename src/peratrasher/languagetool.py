@@ -130,6 +130,28 @@ class LocalCheckerClient:
             pass
 
 
+def _looks_like_proper_noun(word: str, text: str, offset: int) -> bool:
+    """Heuristic: is `word` a likely proper noun / loan word, *not* a real
+    misspelling? Two cases:
+
+    1. Pure ASCII-Latin token (taxonomy names, brands, English embeds).
+    2. Capitalized non-sentence-initial token (Cyrillic uppercase first letter
+       NOT preceded by `.!?` — most likely a name / place not in LT's dict).
+    """
+    if not word:
+        return False
+    if word.isascii() and word.isalpha():
+        return True
+    if word[0].isupper():
+        i = offset - 1
+        while i >= 0 and text[i].isspace():
+            i -= 1
+        if i < 0:
+            return False  # word is at start of input
+        return text[i] not in ".!?"
+    return False
+
+
 class LanguageToolStage(Stage):
     name = "languagetool"
 
@@ -142,9 +164,17 @@ class LanguageToolStage(Stage):
         no_suggestions: bool = True,
         workers: int = 1,
         client: _CheckerClient | None = None,
+        input_field: str = "text",
+        metric_prefix: str = "langtool",
+        exclude_proper_nouns: bool = False,
     ) -> None:
         if workers < 1:
             raise ValueError(f"workers must be >= 1, got {workers}")
+        self.input_field = input_field
+        self.metric_prefix = metric_prefix
+        self.exclude_proper_nouns = exclude_proper_nouns
+        if input_field != "text":
+            self.name = f"languagetool_{input_field}"
         self._owns_clients = False
         if client is not None:
             # Test / single-client injection path: no parallelism, no JVMs spawned.
@@ -185,6 +215,7 @@ class LanguageToolStage(Stage):
         self._rows_with_matches = 0
         self._issue_type_totals: Counter[str] = Counter()
         self._match_counts: list[int] = []
+        self._excluded_proper_nouns_total = 0
 
     # --- single-row entrypoint (kept for tests / callers that still use it) ---
     def process(self, row: dict) -> None:
@@ -214,35 +245,52 @@ class LanguageToolStage(Stage):
             self._client_q.put(client)
 
     def _process_with(self, client: _CheckerClient, row: dict) -> None:
-        payload = client.check(row["text"])
+        text = row[self.input_field]
+        payload = client.check(text)
         if "error" in payload and "matches" not in payload:
             raise RuntimeError(f"LocalChecker error: {payload['error']}")
         matches = payload.get("matches", [])
 
         if self.disabled_rules:
             matches = [
-                m for m in matches
+                m
+                for m in matches
                 if (m.get("rule", {}).get("id") or "") not in self.disabled_rules
             ]
 
         types: Counter[str] = Counter()
+        excluded = 0
         for m in matches:
             issue_type = m.get("rule", {}).get("issueType") or "uncategorized"
+            # Only misspellings are exclusion-eligible: LT's other issue types
+            # (grammar, whitespace, etc.) don't fire on proper nouns.
+            if self.exclude_proper_nouns and issue_type == "misspelling":
+                offset = int(m.get("offset", 0))
+                length = int(m.get("length", 0))
+                word = text[offset : offset + length]
+                if _looks_like_proper_noun(word, text, offset):
+                    excluded += 1
+                    continue
             types[issue_type] += 1
 
-        count = len(matches)
-        num_words = max(int(row.get("num_words") or 0), 1)
+        count = sum(types.values())
+        num_words = int(row.get("num_words") or 0)
+        if num_words <= 0:
+            num_words = len(row[self.input_field].split())
+        num_words = max(num_words, 1)
         density = count / num_words
 
-        row.setdefault("metrics", {})["langtool"] = {
+        row.setdefault("metrics", {})[self.metric_prefix] = {
             "types": dict(types),
             "count": count,
             "density": density,
+            "excluded_proper_nouns": excluded,
         }
 
         with self._stats_lock:
             self._rows_total += 1
             self._match_counts.append(count)
+            self._excluded_proper_nouns_total += excluded
             if count > 0:
                 self._rows_with_matches += 1
                 self._issue_type_totals.update(types)
@@ -253,6 +301,7 @@ class LanguageToolStage(Stage):
                 "rows_total": self._rows_total,
                 "rows_with_matches": self._rows_with_matches,
                 "issue_type_totals": dict(self._issue_type_totals),
+                "excluded_proper_nouns_total": self._excluded_proper_nouns_total,
             }
             counts = list(self._match_counts)
         if counts:
