@@ -7,6 +7,7 @@ dependencies = [
     "fasttext-numpy2>=0.10.4",
     "ftfy>=6.0",
     "pyyaml>=6.0",
+    "text-dedup>=0.4.0",
 ]
 
 [project.scripts]

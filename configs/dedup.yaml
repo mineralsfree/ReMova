@@ -1,0 +1,16 @@
+input: data/bouquet_clean_pipeline.jsonl # output of `peratrasher --config configs/pipeline.yaml`
+output: data/bouquet_clean_pipeline_dedup.jsonl
+stats_dir: stats/
+stats_prefix: bouquet_be
+
+# Dedup on the Belarusian side. Bouquet uses `src_text` for it.
+text_field: src_text
+
+minhash:
+  threshold: 0.8 # Jaccard threshold above which rows cluster.
+  ngram_size: 5 # token n-gram size for shingling.
+  num_perm: 128 # MinHash permutation count.
+  min_length:
+    5 # below this token count text-dedup filters the row out;
+    # filtered rows become singletons (their own cluster).
+  num_proc: 1 # text-dedup multiprocessing degree.
