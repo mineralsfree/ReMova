@@ -41,5 +41,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/peratrasher"]
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/peratrasher", "tests", "configs", "README.MD", "pipeline.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
