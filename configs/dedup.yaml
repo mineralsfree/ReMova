@@ -1,10 +1,13 @@
-input: data/bouquet_clean_pipeline.jsonl # output of `peratrasher --config configs/pipeline.yaml`
-output: data/bouquet_clean_pipeline_dedup.jsonl
+input: data/${DATASET}_clean_pipeline.jsonl # output of `peratrasher --config configs/pipeline.yaml`
+output: data/${DATASET}_clean_pipeline_dedup.jsonl
 stats_dir: stats/
-stats_prefix: bouquet_be
+stats_prefix: ${DATASET}_be
 
-# Dedup on the Belarusian side. Bouquet uses `src_text` for it.
-text_field: src_text
+# Dedup on the Belarusian side. HPLT rows carry `src` / `tgt` (tmx-prep schema),
+# unlike bouquet's `src_text` — text_field set accordingly. Writes
+# `metrics.dedup_keeper` (one True per near-dup cluster); the filter's
+# `not_a_duplicate` rule reads it.
+text_field: ${SRC_FIELD}
 
 minhash:
   threshold: 0.8 # Jaccard threshold above which rows cluster.

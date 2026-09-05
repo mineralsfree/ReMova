@@ -19,6 +19,7 @@ import fasttext
 import yaml
 
 from peratrasher.base import Stage
+from peratrasher.configio import load_config
 from peratrasher.pipeline import STAGES, _run_pipeline
 
 
@@ -117,6 +118,8 @@ class BiGlotLIDStage(Stage):
         tgt_field: str = "tgt",
         src_lang_field: str = "src_lang",
         tgt_lang_field: str = "tgt_lang",
+        src_lang: str | None = None,
+        tgt_lang: str | None = None,
         score_threshold: float = 0.7,
         min_words: int = 0,
     ) -> None:
@@ -125,6 +128,10 @@ class BiGlotLIDStage(Stage):
         self.tgt_field = tgt_field
         self.src_lang_field = src_lang_field
         self.tgt_lang_field = tgt_lang_field
+        # Literal expected lang codes — when set, override per-row field lookup.
+        # Use for fixed-language corpora whose rows don't carry src_lang/tgt_lang.
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
         self.score_threshold = score_threshold
         # GlotLID is unreliable on very short text (≤4 tokens it mostly guesses
         # at the script level, e.g. flagging short Belarusian as Russian/
@@ -173,12 +180,20 @@ class BiGlotLIDStage(Stage):
             row.setdefault("removal_reasons", [])
             return
 
+        expected_src = (
+            self.src_lang if self.src_lang is not None
+            else row.get(self.src_lang_field)
+        )
+        expected_tgt = (
+            self.tgt_lang if self.tgt_lang is not None
+            else row.get(self.tgt_lang_field)
+        )
         src_wrong = (
-            src_label != row.get(self.src_lang_field)
+            src_label != expected_src
             or src_score < self.score_threshold
         )
         tgt_wrong = (
-            tgt_label != row.get(self.tgt_lang_field)
+            tgt_label != expected_tgt
             or tgt_score < self.score_threshold
         )
 
@@ -215,8 +230,7 @@ PARALLEL_STAGES: dict[str, type[Stage]] = {
 
 
 def run(config_path: str) -> None:
-    with open(config_path, encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    cfg: dict[str, Any] = load_config(config_path)
     _run_pipeline(cfg, PARALLEL_STAGES)
 
 

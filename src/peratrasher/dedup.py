@@ -29,6 +29,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
 
+from peratrasher.configio import load_config
 from peratrasher.jsonio import iter_jsonl, write_row
 
 # Stop HF datasets from probing the hub on every load.
@@ -36,8 +37,7 @@ os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
 
 
 def run_dedup(config_path: str | Path) -> None:
-    with open(config_path, encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    cfg: dict[str, Any] = load_config(config_path)
 
     input_path = Path(cfg["input"])
     output_path = Path(cfg["output"])

@@ -1,30 +1,34 @@
-input: data/bouquet.jsonl
-output: data/bouquet_clean.jsonl
+input: ${INPUT_FILE}
+output: data/${DATASET}_clean.jsonl
 stats_dir: stats/
-stats_prefix: bouquet_be_en
+stats_prefix: ${DATASET}
 
 # Bouquet uses `src_text` / `tgt_text` field names (not `src` / `tgt`) — every
 # stage below points at those via its `input_field` / `*_field` kwargs.
 stages:
+  - name: wiki_markup
+    input_field: ${SRC_FIELD}
+  - name: wiki_markup
+    input_field: ${TGT_FIELD}
   - name: wikificator
-    input_field: src_text
-  - name: citations              # strip [5]-style Wikipedia citation markers
-    input_field: src_text
+    input_field: ${SRC_FIELD}
+  - name: citations # strip [5]-style Wikipedia citation markers
+    input_field: ${SRC_FIELD}
   - name: citations
-    input_field: tgt_text
+    input_field: ${TGT_FIELD}
   - name: ftfy
-    input_field: src_text
+    input_field: ${SRC_FIELD}
   - name: ftfy
-    input_field: tgt_text
+    input_field: ${TGT_FIELD}
   - name: nfkc
-    input_field: src_text
+    input_field: ${SRC_FIELD}
   - name: nfkc
-    input_field: tgt_text
+    input_field: ${TGT_FIELD}
 
   # Parallel-only stages.
   - name: length_ratio
-    src_field: src_text
-    tgt_field: tgt_text
+    src_field: ${SRC_FIELD}
+    tgt_field: ${TGT_FIELD}
     unit: words
     min_ratio: 0.5
     max_ratio: 2.5
@@ -34,11 +38,12 @@ stages:
       # because translation length naturally varies more there.
   - name: bi_glotlid
     model_path: models/glotlid.bin
-    src_field: src_text
-    tgt_field: tgt_text
-    src_lang_field: src_lang
-    tgt_lang_field: tgt_lang
-    score_threshold: 0.55
-    min_words: 5 # GlotLID is unreliable below ~5 tokens (mislabels short BE
-                 # as RU/UK and short EN as Esperanto/Swiss-German). Below
-                 # this, predictions are recorded but flags are suppressed.
+    src_field: ${SRC_FIELD}
+    tgt_field: ${TGT_FIELD}
+    src_lang: ${SRC_LANG}
+    tgt_lang: ${TGT_LANG}
+    score_threshold: 0.7
+    min_words:
+      5 # GlotLID is unreliable below ~5 tokens (mislabels short BE
+      # as RU/UK and short EN as Esperanto/Swiss-German). Below
+      # this, predictions are recorded but flags are suppressed.

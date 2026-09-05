@@ -32,6 +32,7 @@ from typing import Any, Callable
 
 import yaml
 
+from peratrasher.configio import load_config
 from peratrasher.jsonio import iter_jsonl, write_row
 
 
@@ -109,8 +110,7 @@ def _validate_rules(rules: list[dict]) -> None:
 
 
 def run(config_path: str | Path) -> None:
-    with open(config_path, encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    cfg: dict[str, Any] = load_config(config_path)
 
     input_path = Path(cfg["input"])
     survived_path = Path(cfg["survived"])

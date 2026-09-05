@@ -8,6 +8,7 @@ import yaml
 
 from peratrasher.base import Stage
 from peratrasher.citations import CitationsStage
+from peratrasher.configio import load_config
 from peratrasher.ftfy_stage import FtfyStage
 from peratrasher.glotlid import GlotLIDStage
 from peratrasher.jsonio import iter_jsonl, write_row
@@ -47,8 +48,7 @@ def build_stages(stage_configs: list[dict]) -> list[Stage]:
 
 
 def run(config_path: str | Path) -> None:
-    with open(config_path, encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    cfg: dict[str, Any] = load_config(config_path)
     _run_pipeline(cfg, STAGES)
 
 

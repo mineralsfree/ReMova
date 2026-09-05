@@ -1,7 +1,7 @@
-input: data/bouquet_clean.jsonl # output of `peratrasher-parallel --config configs/parallel.yaml`
-output: data/bouquet_clean_pipeline.jsonl
+input: data/${DATASET}_clean.jsonl # output of `peratrasher-parallel --config configs/parallel.yaml`
+output: data/${DATASET}_clean_pipeline.jsonl
 stats_dir: stats/
-stats_prefix: bouquet_be
+stats_prefix: ${DATASET}
 batch_size: 256 # rows buffered before a flush; should be >= LT workers x several
 
 # Run the monolingual pipeline on the Belarusian side of the bitext.
@@ -12,12 +12,16 @@ batch_size: 256 # rows buffered before a flush; should be >= LT workers x severa
 # wikificator / ftfy / nfkc are already applied per-side in parallel.yaml,
 # but they're idempotent — leaving them here is defensive and harmless.
 stages:
-  # - name: wikificator
-  #   input_field: src_text
-  # - name: ftfy
-  #   input_field: src_text
-  # - name: nfkc
-  #   input_field: src_text
+  - name: wiki_markup
+    input_field: ${SRC_FIELD}
+  - name: wikificator
+    input_field: ${SRC_FIELD}
+  - name: citations
+    input_field: ${SRC_FIELD}
+  - name: ftfy
+    input_field: ${SRC_FIELD}
+  - name: nfkc
+    input_field: ${SRC_FIELD}
   # - name: glotlid
   #   model_path: models/glotlid.bin
   #   input_field: src_text
@@ -26,15 +30,20 @@ stages:
   #   removal_reason: src_wrong_lang
   #   score_threshold: 0.7
   - name: languagetool
-    input_field: src_text
+    input_field: ${SRC_FIELD}
     metric_prefix: src_langtool # writes metrics.src_langtool = {types, count, density, excluded_proper_nouns}
     language: be-BY
     workers: 8 # one JVM per perf core; LT's rule engine is the bottleneck
-    exclude_proper_nouns: true # discount LT misspellings on capitalised non-initial / pure-Latin tokens
-                               # (Швецыі, Стакгольме, Hister, Ryanair, ...). Tarashkievica still flags.
+    exclude_proper_nouns:
+      true # discount LT misspellings on capitalised non-initial / pure-Latin tokens
+      # (Швецыі, Стакгольме, Hister, Ryanair, ...). Tarashkievica still flags.
+    word_freq_top:
+      2000 # top-N flagged words + rule IDs emitted into the stats file,
+      # same signal as tools/lt_word_freq.py — piggybacks on this
+      # pass so a big corpus is scanned once. Default 500.
     command:
       - java
-      - "@/Users/mikita/languagetool/languagetool-server/target/localchecker.argfile"
+      - "@/Users/mikita/languagetool-104/languagetool-server/target/localchecker.argfile"
       - org.languagetool.server.LocalChecker
     # disabled_rules:
     #   - WHITESPACE_RULE
