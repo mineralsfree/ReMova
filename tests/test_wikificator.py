@@ -1,4 +1,11 @@
-from peratrasher.wikificator import WikificatorStage, apply_rules
+import pytest
+
+from peratrasher.wikificator import (
+    REPLACEMENTS,
+    WikificatorStage,
+    _load_replacements,
+    apply_rules,
+)
 
 
 def test_clean_text_unchanged():
@@ -184,3 +191,28 @@ def test_stats_aggregates_across_rows():
     assert s["rows_total"] == 3
     assert s["rows_changed"] == 2
     assert sum(s["rule_fire_counts"].values()) >= 2
+
+
+def test_replacements_loaded_from_package_data():
+    # The packaged data/fix.txt is the only source for the table; a short
+    # table means it was lost and most tarashkievica would pass through.
+    assert len(REPLACEMENTS) > 800
+
+
+def test_replacement_from_data_file_fires():
+    stage = WikificatorStage()
+    row = {"text": "Трэба есьці"}
+    stage.process(row)
+    assert row["text"] == "Трэба есці"
+    assert stage.stats()["rule_fire_counts"]["replacements[есьці]"] == 1
+
+
+def test_load_replacements_missing_file_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        _load_replacements(tmp_path / "absent.txt")
+
+
+def test_load_replacements_skips_comments_and_noops(tmp_path):
+    path = tmp_path / "fix.txt"
+    path.write_text("# comment\n\nсьвет=свет\nзмена=змена\nnosign\n", encoding="utf-8")
+    assert _load_replacements(path) == {"сьвет": "свет"}

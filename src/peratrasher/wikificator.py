@@ -10,6 +10,7 @@ Order matters. Apply via apply_rules(text).
 
 import re
 from collections import Counter
+from importlib.resources import files as _resource_files
 
 from peratrasher.base import Stage
 
@@ -329,6 +330,81 @@ COLLAPSE: list[tuple[re.Pattern, str]] = [
     (re.compile(r"[ \t ]{2,}"), " "),
 ]
 
+# ---- Bulk tarashkievica → narkamaŭka word replacements ------------------
+# Source of truth: `src/peratrasher/data/fix.txt`, format `key=value`,
+# one per line, `#` for comments. Loaded once at module import. Applied with
+# case-insensitive whole-word matching (Python `\b` is Unicode-aware so it
+# works on Cyrillic). Case is preserved on the replacement: input "Пасьля"
+# at sentence start becomes "Пасля"; explicitly-capitalized targets like
+# "лукашэнка"→"Лукашэнка" fix de-capitalized proper nouns.
+#
+# Some entries are also matched by more general patterns in TYPOS above
+# (e.g. `((?:^|\s)[пП])асьля` → `пасля` makes `пасьля=пасля` redundant in
+# the common case). They are kept anyway because TYPOS only fires after
+# whitespace/start-of-text, whereas `\b` also fires after punctuation /
+# brackets / quotes — so this lookup catches `(пасьля)`, `«сьвет»`, etc.
+# that TYPOS misses.
+
+_FIX_TXT = _resource_files("peratrasher") / "data" / "fix.txt"
+
+
+def _load_replacements(source=_FIX_TXT) -> dict[str, str]:
+    """Parse `key=value` pairs from the packaged `data/fix.txt`.
+
+    Skips comments / blank lines / no-ops (key == value). A missing file is
+    a hard error: the table is required data, and quietly running without it
+    would leave tarashkievica in the output with no signal.
+    """
+    out: dict[str, str] = {}
+    with source.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip()
+            if k and v and k != v:
+                out[k] = v
+    return out
+
+
+REPLACEMENTS: dict[str, str] = _load_replacements()
+if not REPLACEMENTS:
+    # An empty table would build the alternation `\b(?:)\b`, which matches the
+    # empty string at every word boundary and then KeyErrors on `""`.
+    raise RuntimeError(f"no replacements parsed from {_FIX_TXT}")
+
+# Build one big alternation; sort by length desc so longer keys take priority
+# (e.g. "грамадзкага" before "грамадзкі") — Python's regex engine is leftmost,
+# so order matters when prefixes overlap.
+_REPLACEMENTS_RE = re.compile(
+    r"\b(?:"
+    + "|".join(re.escape(k) for k in sorted(REPLACEMENTS, key=len, reverse=True))
+    + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _apply_replacements(text: str, fires: Counter) -> str:
+    """Whole-word tarashkievica→narkamaŭka substitution. Tracks per-key
+    firings in `fires` so stats output shows which entries actually hit."""
+
+    def sub(m: re.Match) -> str:
+        word = m.group(0)
+        key = word.lower()
+        repl = REPLACEMENTS[key]
+        # If the input was capitalized but the replacement is lowercase
+        # (e.g. sentence-initial "Пасьля" → "пасля"), uppercase the first
+        # letter of the replacement. Targets that are already capitalized
+        # (proper-noun fixes like "лукашэнка"→"Лукашэнка") pass through.
+        if word[0].isupper() and repl[0].islower():
+            repl = repl[0].upper() + repl[1:]
+        fires[f"replacements[{key}]"] += 1
+        return repl
+
+    return _REPLACEMENTS_RE.sub(sub, text)
+
+
 # ---- Latin → Belarusian Cyrillic homoglyph fix --------------------------
 # Only applied to word-tokens that already contain Belarusian Cyrillic letters,
 # so pure-Latin tokens (URLs, English proper nouns, code) are left alone.
@@ -393,6 +469,7 @@ def apply_rules(
     text: str,
     *,
     apply_typos: bool = True,
+    apply_replacements: bool = True,
     apply_dashes: bool = True,
     apply_nbsp: bool = True,
     apply_quotes: bool = True,
@@ -408,6 +485,8 @@ def apply_rules(
         text = new
     if apply_typos:
         text = _apply_group(text, TYPOS, "typos", fires)
+    if apply_replacements:
+        text = _apply_replacements(text, fires)
     text = _apply_group(text, CORE, "core", fires)
     if apply_dashes:
         text = _apply_group(text, DASHES, "dashes", fires)
@@ -430,6 +509,7 @@ class WikificatorStage(Stage):
         input_field: str = "text",
         output_field: str | None = None,
         apply_typos: bool = True,
+        apply_replacements: bool = True,
         apply_dashes: bool = True,
         apply_nbsp: bool = True,
         apply_quotes: bool = True,
@@ -439,6 +519,7 @@ class WikificatorStage(Stage):
         if input_field != "text":
             self.name = f"wikificator_{input_field}"
         self.apply_typos = apply_typos
+        self.apply_replacements = apply_replacements
         self.apply_dashes = apply_dashes
         self.apply_nbsp = apply_nbsp
         self.apply_quotes = apply_quotes
@@ -452,6 +533,7 @@ class WikificatorStage(Stage):
         cleaned, fires = apply_rules(
             original,
             apply_typos=self.apply_typos,
+            apply_replacements=self.apply_replacements,
             apply_dashes=self.apply_dashes,
             apply_nbsp=self.apply_nbsp,
             apply_quotes=self.apply_quotes,

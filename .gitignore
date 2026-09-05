@@ -24,5 +24,7 @@ htmlcov/
 
 # Project artifacts (data, models, run outputs)
 data/
+# packaged replacement table, not a run artifact
+!src/peratrasher/data/
 models/
 stats/
