@@ -14,9 +14,11 @@ from peratrasher.glotlid import GlotLIDStage
 from peratrasher.jsonio import iter_jsonl, write_row
 from peratrasher.languagetool import LanguageToolStage
 from peratrasher.nfkc import NFKCStage
+from peratrasher.wiki_markup import WikiMarkupStage
 from peratrasher.wikificator import WikificatorStage
 
 STAGES: dict[str, type[Stage]] = {
+    "wiki_markup": WikiMarkupStage,
     "wikificator": WikificatorStage,
     "citations": CitationsStage,
     "ftfy": FtfyStage,
