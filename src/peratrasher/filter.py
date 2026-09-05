@@ -19,6 +19,9 @@ Rule types
                               Params: key, value.
 - require_true              — row passes iff `bool(_get(row, key))`.
                               Missing key → fails. Params: key.
+- not_contains              — row passes iff `substring` is NOT in
+                              `_get(row, key)`. Non-string / missing →
+                              passes (no objection). Params: key, substring.
 
 `key` is a dotted path into the row dict, e.g. `metrics.src_langtool.density`.
 """
@@ -75,12 +78,20 @@ def _require_true(row: dict, params: dict) -> bool:
     return bool(_get(row, params["key"]))
 
 
+def _not_contains(row: dict, params: dict) -> bool:
+    value = _get(row, params["key"])
+    if not isinstance(value, str):
+        return True
+    return params["substring"] not in value
+
+
 RULE_LIBRARY: dict[str, Callable[[dict, dict], bool]] = {
     "no_removal_reasons": _no_removal_reasons,
     "reject_if_reason": _reject_if_reason,
     "min_metric": _min_metric,
     "max_metric": _max_metric,
     "require_true": _require_true,
+    "not_contains": _not_contains,
 }
 
 
