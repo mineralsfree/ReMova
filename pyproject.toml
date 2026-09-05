@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fasttext-numpy2>=0.10.4",
     "ftfy>=6.0",
+    "mwparserfromhell>=0.6",
     "pyyaml>=6.0",
     "text-dedup>=0.4.0",
 ]
@@ -18,6 +19,17 @@ peratrasher-tatoeba-prep = "peratrasher.tatoeba_prep:main"
 peratrasher-moses-prep = "peratrasher.moses_prep:main"
 peratrasher-filter = "peratrasher.filter:main"
 peratrasher-export = "peratrasher.export:main"
+peratrasher-neural = "peratrasher.neural:main"
+
+[project.optional-dependencies]
+# Heavy GPU deps for neural QE metrics — opt in with `uv sync --extra neural`.
+# Lazy-imported inside the relevant stage classes, so the rest of the
+# codebase works without them installed.
+neural = [
+    "torch>=2.0",
+    "sonar-space>=0.2",        # BLASER 2.0 + SONAR encoder
+    "fairseq2>=0.2",           # SONAR backend
+]
 
 [dependency-groups]
 dev = ["pytest>=7.0"]

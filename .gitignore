@@ -22,6 +22,9 @@ htmlcov/
 .vscode/
 *.swp
 
+# Local-only, not released
+src/peratrasher/tmx_prep.py
+
 # Project artifacts (data, models, run outputs)
 data/
 # packaged replacement table, not a run artifact
