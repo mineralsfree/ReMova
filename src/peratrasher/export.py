@@ -63,6 +63,22 @@ def run(config_path: str | Path) -> None:
         raise ValueError(f"format must be 'parquet' or 'jsonl', got {fmt!r}")
     if not columns:
         raise ValueError("columns must be a non-empty list")
+    # Dedupe column names while preserving order. Without this, the parquet
+    # branch silently doubles rows when two entries resolve to the same name
+    # (common with monolingual env files where SRC_FIELD == TGT_FIELD).
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for c in columns:
+        if c not in seen:
+            seen.add(c)
+            deduped.append(c)
+    if len(deduped) < len(columns):
+        dropped = [c for c in columns if columns.count(c) > 1]
+        print(
+            f"  export: dropped duplicate column names: {sorted(set(dropped))}",
+            file=sys.stderr,
+        )
+        columns = deduped
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     stats_dir.mkdir(parents=True, exist_ok=True)
