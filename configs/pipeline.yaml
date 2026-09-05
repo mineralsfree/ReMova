@@ -41,6 +41,8 @@ stages:
       2000 # top-N flagged words + rule IDs emitted into the stats file,
       # same signal as tools/lt_word_freq.py — piggybacks on this
       # pass so a big corpus is scanned once. Default 500.
+    # requires a LanguageTool build with LocalChecker — see README.MD;
+    # the stage refuses to start if `java` or the argfile is missing.
     command:
       - java
       - "@/Users/mikita/languagetool-104/languagetool-server/target/localchecker.argfile"

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
 import queue
+import shutil
 import subprocess
 import threading
 from collections import Counter
@@ -23,6 +25,31 @@ from peratrasher.base import Stage
 class _CheckerClient(Protocol):
     def check(self, text: str) -> dict[str, Any]: ...
     def close(self) -> None: ...
+
+
+_LT_SETUP_HINT = (
+    "The languagetool stage needs a LanguageTool build exposing "
+    "org.languagetool.server.LocalChecker, which is not in a stock "
+    "LanguageTool distribution — see 'Build LanguageTool with LocalChecker' "
+    "in README.MD."
+)
+
+
+def _preflight(argv: list[str]) -> None:
+    """Reject a `command` that cannot work before paying for a JVM start.
+
+    Without this, a missing launcher surfaces as a bare Popen FileNotFoundError
+    and a stale `@argfile` path costs the full `startup_timeout` before failing
+    with a wall of JVM stderr.
+    """
+    if shutil.which(argv[0]) is None:
+        raise FileNotFoundError(f"{argv[0]!r} not found on PATH. {_LT_SETUP_HINT}")
+    for arg in argv:
+        # `java @file` — the classpath argfile produced when building LT.
+        if arg.startswith("@") and not os.path.exists(arg[1:]):
+            raise FileNotFoundError(
+                f"java argfile {arg[1:]!r} does not exist. {_LT_SETUP_HINT}"
+            )
 
 
 class LocalCheckerClient:
@@ -41,6 +68,7 @@ class LocalCheckerClient:
         if no_suggestions:
             argv.append("--no-suggestions")
         self._argv = argv
+        _preflight(argv)
         self._proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
