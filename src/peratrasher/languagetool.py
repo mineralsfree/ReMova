@@ -167,6 +167,9 @@ class LanguageToolStage(Stage):
         input_field: str = "text",
         metric_prefix: str = "langtool",
         exclude_proper_nouns: bool = False,
+        track_word_freq: bool = True,
+        word_freq_top: int = 500,
+        word_freq_issue_types: tuple[str, ...] = ("misspelling",),
     ) -> None:
         if workers < 1:
             raise ValueError(f"workers must be >= 1, got {workers}")
@@ -210,12 +213,20 @@ class LanguageToolStage(Stage):
         )
         self.language = language
         self.disabled_rules = set(disabled_rules or [])
+        self.track_word_freq = track_word_freq
+        self.word_freq_top = word_freq_top
+        self.word_freq_issue_types = set(word_freq_issue_types)
         self._stats_lock = threading.Lock()
         self._rows_total = 0
         self._rows_with_matches = 0
         self._issue_type_totals: Counter[str] = Counter()
         self._match_counts: list[int] = []
         self._excluded_proper_nouns_total = 0
+        # Per-word + per-rule frequency over surviving matches (after the
+        # proper-noun heuristic). Same signal `tools/lt_word_freq.py` produces,
+        # piggybacked onto the main pass so a 10M-row corpus is scanned once.
+        self._word_freq: Counter[str] = Counter()
+        self._rule_freq: Counter[str] = Counter()
 
     # --- single-row entrypoint (kept for tests / callers that still use it) ---
     def process(self, row: dict) -> None:
@@ -260,18 +271,28 @@ class LanguageToolStage(Stage):
 
         types: Counter[str] = Counter()
         excluded = 0
+        words_local: list[str] = []
+        rules_local: list[str] = []
         for m in matches:
-            issue_type = m.get("rule", {}).get("issueType") or "uncategorized"
+            rule = m.get("rule", {}) or {}
+            issue_type = rule.get("issueType") or "uncategorized"
+            rule_id = rule.get("id") or "<no-id>"
+            offset = int(m.get("offset", 0))
+            length = int(m.get("length", 0))
+            word = text[offset : offset + length]
             # Only misspellings are exclusion-eligible: LT's other issue types
             # (grammar, whitespace, etc.) don't fire on proper nouns.
-            if self.exclude_proper_nouns and issue_type == "misspelling":
-                offset = int(m.get("offset", 0))
-                length = int(m.get("length", 0))
-                word = text[offset : offset + length]
-                if _looks_like_proper_noun(word, text, offset):
-                    excluded += 1
-                    continue
+            if (
+                self.exclude_proper_nouns
+                and issue_type == "misspelling"
+                and _looks_like_proper_noun(word, text, offset)
+            ):
+                excluded += 1
+                continue
             types[issue_type] += 1
+            if self.track_word_freq and issue_type in self.word_freq_issue_types:
+                words_local.append(word.lower())
+                rules_local.append(rule_id)
 
         count = sum(types.values())
         num_words = int(row.get("num_words") or 0)
@@ -294,6 +315,9 @@ class LanguageToolStage(Stage):
             if count > 0:
                 self._rows_with_matches += 1
                 self._issue_type_totals.update(types)
+            if words_local:
+                self._word_freq.update(words_local)
+                self._rule_freq.update(rules_local)
 
     def stats(self) -> dict:
         with self._stats_lock:
@@ -304,6 +328,15 @@ class LanguageToolStage(Stage):
                 "excluded_proper_nouns_total": self._excluded_proper_nouns_total,
             }
             counts = list(self._match_counts)
+            if self.track_word_freq:
+                out["distinct_flagged_words"] = len(self._word_freq)
+                out["total_flagged_word_occurrences"] = sum(self._word_freq.values())
+                out["top_flagged_words"] = dict(
+                    self._word_freq.most_common(self.word_freq_top)
+                )
+                out["top_rule_ids"] = dict(
+                    self._rule_freq.most_common(self.word_freq_top)
+                )
         if counts:
             sorted_counts = sorted(counts)
             n = len(sorted_counts)
