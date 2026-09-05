@@ -316,6 +316,71 @@ def test_bi_glotlid_label_totals_aggregate(patch_load):
     assert st["tgt_label_totals"] == {"bel_Cyrl": 2}
 
 
+def test_bi_glotlid_literal_lang_no_row_fields(patch_load):
+    """Schema without src_lang/tgt_lang fields: literal expected langs should
+    work and a matching prediction should NOT be flagged."""
+    patch_load(
+        {
+            "прывітанне свет": ("bel_Cyrl", 0.99),
+            "hello world": ("eng_Latn", 0.99),
+        }
+    )
+    stage = BiGlotLIDStage(
+        model_path="ignored",
+        src_field="be",
+        tgt_field="en",
+        src_lang="bel_Cyrl",
+        tgt_lang="eng_Latn",
+        score_threshold=0.7,
+    )
+    row = {"be": "прывітанне свет", "en": "hello world"}
+    stage.process(row)
+    assert row["removal_reasons"] == []
+
+
+def test_bi_glotlid_literal_lang_mismatch_flagged(patch_load):
+    """Literal expected lang catches a misclassified row even when the row
+    has no src_lang/tgt_lang field."""
+    patch_load(
+        {
+            "это русский": ("rus_Cyrl", 0.99),
+            "hello world": ("eng_Latn", 0.99),
+        }
+    )
+    stage = BiGlotLIDStage(
+        model_path="ignored",
+        src_field="be",
+        tgt_field="en",
+        src_lang="bel_Cyrl",
+        tgt_lang="eng_Latn",
+        score_threshold=0.7,
+    )
+    row = {"be": "это русский", "en": "hello world"}
+    stage.process(row)
+    assert "src_wrong_lang" in row["removal_reasons"]
+    assert "tgt_wrong_lang" not in row["removal_reasons"]
+
+
+def test_bi_glotlid_literal_lang_overrides_row_field(patch_load):
+    """If literal lang is set, it WINS over a row field with a different value."""
+    patch_load({"прывітанне свет": ("bel_Cyrl", 0.99), "hello world": ("eng_Latn", 0.99)})
+    stage = BiGlotLIDStage(
+        model_path="ignored",
+        src_lang="bel_Cyrl",         # literal says bel
+        tgt_lang="eng_Latn",
+        score_threshold=0.7,
+    )
+    # Row says src_lang=rus_Cyrl — literal should override and the row should pass.
+    row = {
+        "src": "прывітанне свет",
+        "tgt": "hello world",
+        "src_lang": "rus_Cyrl",
+        "tgt_lang": "eng_Latn",
+    }
+    stage.process(row)
+    assert row["removal_reasons"] == []
+
+
 # ---- Runner end-to-end ---------------------------------------------------
 
 
